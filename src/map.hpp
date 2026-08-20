@@ -320,6 +320,7 @@ public:
     }
 
     void erase(iterator pos) {
+        if (pos.mp != this) throw invalid_iterator();
         if (pos == end()) throw invalid_iterator();
         eraseNode(pos.nd);
         sz--;
