@@ -18,11 +18,13 @@ private:
         value_type *data;
         Node *c[2]; // c[0]=left, c[1]=right
         Node *par;
+        Node *next_free; // for free list
         int ht;
-        Node(value_type *d, Node *p = nullptr) : data(d), par(p), ht(1) { c[0] = c[1] = nullptr; }
+        Node(value_type *d, Node *p = nullptr) : data(d), par(p), next_free(nullptr), ht(1) { c[0] = c[1] = nullptr; }
     };
 
     Node *rt;
+    Node *free_head; // head of free list for erased nodes
     size_t sz;
     Compare cmp;
 
@@ -83,6 +85,23 @@ private:
         return n;
     }
 
+    void addToFreeList(Node *node) {
+        node->c[0] = nullptr;
+        node->c[1] = nullptr;
+        node->par = nullptr;
+        node->next_free = free_head;
+        free_head = node;
+    }
+
+    void clearFreeList() {
+        while (free_head) {
+            Node *tmp = free_head;
+            free_head = free_head->next_free;
+            delete tmp->data;
+            delete tmp;
+        }
+    }
+
 public:
     class const_iterator;
 
@@ -111,8 +130,8 @@ public:
         }
         value_type &operator*() const { return *(nd->data); }
         value_type *operator->() const noexcept { return nd->data; }
-        bool operator==(const iterator &rhs) const { return nd == rhs.nd; }
-        bool operator!=(const iterator &rhs) const { return nd != rhs.nd; }
+        bool operator==(const iterator &rhs) const { return nd == rhs.nd && mp == rhs.mp; }
+        bool operator!=(const iterator &rhs) const { return !(*this == rhs); }
         bool operator==(const const_iterator &rhs) const;
         bool operator!=(const const_iterator &rhs) const;
     };
@@ -143,8 +162,8 @@ public:
         }
         const value_type &operator*() const { return *(nd->data); }
         const value_type *operator->() const noexcept { return nd->data; }
-        bool operator==(const const_iterator &rhs) const { return nd == rhs.nd; }
-        bool operator!=(const const_iterator &rhs) const { return nd != rhs.nd; }
+        bool operator==(const const_iterator &rhs) const { return nd == rhs.nd && mp == rhs.mp; }
+        bool operator!=(const const_iterator &rhs) const { return !(*this == rhs); }
         bool operator==(const iterator &rhs) const;
         bool operator!=(const iterator &rhs) const;
     };
@@ -206,8 +225,7 @@ private:
             } else {
                 rt = child;
             }
-            delete nd->data;
-            delete nd;
+            addToFreeList(nd);
             rebalanceUp(parent);
         } else {
             Node *succ = findMin(nd->c[1]);
@@ -232,9 +250,9 @@ private:
                 rt = succ;
             }
             
-            delete nd->data;
-            delete nd;
+            addToFreeList(nd);
             
+            // Rebalance from succPar up to root
             if (succPar == nd) {
                 rebalanceUp(succ->par);
             } else {
@@ -244,15 +262,18 @@ private:
     }
 
 public:
-    map() : rt(nullptr), sz(0) {}
-    map(const map &other) : rt(nullptr), sz(0) { *this = other; }
+    map() : rt(nullptr), free_head(nullptr), sz(0) {}
+    map(const map &other) : rt(nullptr), free_head(nullptr), sz(0) { *this = other; }
     map &operator=(const map &other) {
         if (this == &other) return *this;
         clear();
         copyRec(rt, nullptr, other.rt);
         return *this;
     }
-    ~map() { clear(); }
+    ~map() { 
+        clearRec(rt); 
+        clearFreeList();
+    }
 
     T &at(const Key &key) {
         Node *n = findNode(rt, key);
@@ -284,7 +305,11 @@ public:
     const_iterator cend() const { return const_iterator(nullptr, const_cast<map*>(this)); }
     bool empty() const { return sz == 0; }
     size_t size() const { return sz; }
-    void clear() { clearRec(rt); rt = nullptr; sz = 0; }
+    void clear() { 
+        clearRec(rt); 
+        rt = nullptr; 
+        sz = 0; 
+    }
 
     pair<iterator, bool> insert(const value_type &value) {
         Node *n = findNode(rt, value.first);
@@ -311,10 +336,10 @@ public:
     }
 };
 
-template<class K, class T, class C> bool map<K,T,C>::iterator::operator==(const const_iterator &rhs) const { return nd == rhs.nd; }
-template<class K, class T, class C> bool map<K,T,C>::iterator::operator!=(const const_iterator &rhs) const { return nd != rhs.nd; }
-template<class K, class T, class C> bool map<K,T,C>::const_iterator::operator==(const iterator &rhs) const { return nd == rhs.nd; }
-template<class K, class T, class C> bool map<K,T,C>::const_iterator::operator!=(const iterator &rhs) const { return nd != rhs.nd; }
+template<class K, class T, class C> bool map<K,T,C>::iterator::operator==(const const_iterator &rhs) const { return nd == rhs.nd && mp == rhs.mp; }
+template<class K, class T, class C> bool map<K,T,C>::iterator::operator!=(const const_iterator &rhs) const { return !(*this == rhs); }
+template<class K, class T, class C> bool map<K,T,C>::const_iterator::operator==(const iterator &rhs) const { return nd == rhs.nd && mp == rhs.mp; }
+template<class K, class T, class C> bool map<K,T,C>::const_iterator::operator!=(const iterator &rhs) const { return !(*this == rhs); }
 
 }
 #endif
